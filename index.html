@@ -1,0 +1,206 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>LGU Document Inventory System</title>
+  <link rel="stylesheet" href="styles.css" />
+  <!-- PapaParse CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/papaparse@5.4.1/papaparse.min.js"></script>
+  <style>
+    /* Inline minimal CSS for suggestions */
+    .search-container {
+      position: relative;
+      max-width: 400px;
+      margin: 1em auto;
+    }
+    #searchInput {
+      width: 100%;
+      padding: 0.5em;
+      font-size: 1rem;
+      border: 1.5px solid #aaa;
+      border-radius: 8px;
+      box-sizing: border-box;
+    }
+    #suggestionsBox {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      background: white;
+      border: 1.5px solid #004080;
+      border-top: none;
+      max-height: 180px;
+      overflow-y: auto;
+      display: none;
+      z-index: 1000;
+      border-radius: 0 0 8px 8px;
+      box-shadow: 0 4px 8px rgba(0,0,0,0.1);
+    }
+    .suggestion-item {
+      padding: 0.4em 0.7em;
+      cursor: pointer;
+      border-bottom: 1px solid #eee;
+    }
+    .suggestion-item:last-child {
+      border-bottom: none;
+    }
+    .suggestion-item:hover {
+      background-color: #004080;
+      color: white;
+    }
+    .document-card {
+      background: #f9f9f9;
+      border-radius: 8px;
+      margin: 1em auto;
+      max-width: 600px;
+      padding: 1em;
+      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+    }
+    .doc-title a {
+      color: #004080;
+      font-weight: bold;
+      font-size: 1.1rem;
+      text-decoration: none;
+    }
+    .doc-title a:hover {
+      text-decoration: underline;
+    }
+    .doc-category {
+      font-style: italic;
+      color: #666;
+      margin-top: 0.3em;
+    }
+    .doc-description {
+      margin-top: 0.5em;
+      color: #333;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>LGU Infanta Document Inventory</h1>
+    <p>Access Public Documents Easily</p>
+  </header>
+
+  <main>
+    <section class="search-container">
+      <input 
+        type="text" 
+        id="searchInput" 
+        placeholder="Search documents by title..."
+        autocomplete="off"
+      />
+      <div id="suggestionsBox"></div>
+    </section>
+
+    <section class="document-list" id="documentList">
+      <!-- Search results will be inserted here -->
+    </section>
+  </main>
+
+  <footer style="text-align:center; margin-top: 2em; color: #666;">
+    &copy; 2025 Local Government Unit Document Inventory System. All rights reserved.
+  </footer>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      const csvUrl = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQbJUW3V9paTSTPAXRDV-fKTiKmQ8UUEQRDV6wkYpFL_4o0KRMIvpZBWXOnPiq2IAZ6cXNZACw4jMrk/pub?gid=1852897177&single=true&output=csv';
+      const documentList = document.getElementById('documentList');
+      const searchInput = document.getElementById('searchInput');
+      const suggestionsBox = document.getElementById('suggestionsBox');
+
+      let documents = [];
+
+      // Fetch CSV text then parse with PapaParse
+      fetch(csvUrl)
+        .then(response => {
+          if (!response.ok) throw new Error(`Network error: ${response.status}`);
+          return response.text();
+        })
+        .then(csvText => {
+          const results = Papa.parse(csvText, { header: true });
+          // Filter docs having Title, Link, and ID (ID not shown but must exist)
+          documents = results.data.filter(doc => doc.Title && doc.Link && doc.ID);
+          displayDocuments(documents);
+        })
+        .catch(err => {
+          console.error('Error loading CSV:', err);
+          documentList.innerHTML = '<p>Failed to load documents. Please try again later.</p>';
+        });
+
+      // Render documents list
+      function displayDocuments(docs) {
+        documentList.innerHTML = '';
+        if (docs.length === 0) {
+          documentList.innerHTML = '<p>No documents found.</p>';
+          return;
+        }
+        docs.forEach(doc => {
+          const card = document.createElement('div');
+          card.className = 'document-card';
+          card.innerHTML = `
+            <div class="doc-title"><a href="${doc.Link}" target="_blank" rel="noopener noreferrer">${doc.Title}</a></div>
+            ${doc.Category ? `<div class="doc-category">${doc.Category}</div>` : ''}
+            ${doc.Description ? `<div class="doc-description">${doc.Description}</div>` : ''}
+          `;
+          documentList.appendChild(card);
+        });
+      }
+
+      // Update suggestion list below input
+      function updateSuggestions(term) {
+        suggestionsBox.innerHTML = '';
+        if (!term) {
+          suggestionsBox.style.display = 'none';
+          return;
+        }
+
+        const suggestions = documents
+          .filter(doc => doc.Title.toLowerCase().includes(term.toLowerCase()))
+          .slice(0, 7);
+
+        if (suggestions.length === 0) {
+          suggestionsBox.style.display = 'none';
+          return;
+        }
+
+        suggestions.forEach(doc => {
+          const div = document.createElement('div');
+          div.className = 'suggestion-item';
+          div.textContent = doc.Title;
+          div.addEventListener('click', () => {
+            searchInput.value = doc.Title;
+            displayDocuments([doc]); // Show only selected doc
+            suggestionsBox.style.display = 'none';
+          });
+          suggestionsBox.appendChild(div);
+        });
+        suggestionsBox.style.display = 'block';
+      }
+
+      // Search input event
+      searchInput.addEventListener('input', () => {
+        const term = searchInput.value.trim();
+        if (!term) {
+          displayDocuments(documents);
+          updateSuggestions('');
+          return;
+        }
+        const filtered = documents.filter(doc =>
+          doc.Title.toLowerCase().includes(term.toLowerCase())
+        );
+        displayDocuments(filtered);
+        updateSuggestions(term);
+      });
+
+      // Hide suggestions on outside click
+      document.addEventListener('click', e => {
+        if (!document.querySelector('.search-container').contains(e.target)) {
+          suggestionsBox.style.display = 'none';
+        }
+      });
+    });
+  </script>
+</body>
+</html>
